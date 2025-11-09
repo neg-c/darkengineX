@@ -6,6 +6,9 @@
 // $Header: r:/t2repos/thief2/src/framewrk/init.cpp,v 1.107 2000/02/25 22:58:18 mwhite Exp $
 
 #include <float.h>
+#include <windows.h>
+#include <shlobj.h>
+#include <objbase.h>
 
 #include <comtools.h>
 #include <recapi.h>
@@ -14,6 +17,7 @@
 #include <appapi.h>
 #include <appagg.h>
 #include <loopapi.h>
+#include <stdio.h>
 #include <config.h>
 #include <cfg.h>
 #include <mprintf.h>
@@ -37,6 +41,7 @@
 #include <appname.h>
 #include <contexts.h>
 #include <init.h>
+#include "gamepaths.h"
 #include <2dapp.h>
 #include <resapp.h>
 #include <gameinfo.h>
@@ -97,10 +102,187 @@ EXTERN BOOL CheckForCD(void);
 // CONFIG INITIALIZATION
 //
 
-#define CONFIG_FILE "cam.cfg"
 #define GAME_CFG_VAR "game"
 #define INCLUDE_PREFIX "include_"
 void AppShutdownConfig(void);
+
+static char gGameConfigPath[_MAX_PATH];
+static char gGameRootPath[_MAX_PATH];
+static char gGameResPath[_MAX_PATH];
+static BOOL gGamePathsReady = FALSE;
+
+static void TrimTrailingSeparators(char* path)
+{
+   size_t len = strlen(path);
+   while (len > 0 && (path[len - 1] == '\\' || path[len - 1] == '/'))
+   {
+      if (len == 3 && path[1] == ':')
+         break;
+      path[--len] = '\0';
+   }
+}
+
+static BOOL DirectoryExistsA(const char* path)
+{
+   DWORD attr = GetFileAttributesA(path);
+   if (attr == INVALID_FILE_ATTRIBUTES)
+      return FALSE;
+   return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+static BOOL FileExistsA(const char* path)
+{
+   DWORD attr = GetFileAttributesA(path);
+   if (attr == INVALID_FILE_ATTRIBUTES)
+      return FALSE;
+   return (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+static BOOL BuildGamePaths(const char* root)
+{
+   if (root == NULL || root[0] == '\0')
+      return FALSE;
+   strncpy(gGameRootPath, root, sizeof(gGameRootPath));
+   gGameRootPath[sizeof(gGameRootPath) - 1] = '\0';
+   TrimTrailingSeparators(gGameRootPath);
+   if (!DirectoryExistsA(gGameRootPath))
+      return FALSE;
+   if (snprintf(gGameConfigPath, sizeof(gGameConfigPath), "%s\\cam.cfg", gGameRootPath) < 0)
+      return FALSE;
+   if (!FileExistsA(gGameConfigPath))
+      return FALSE;
+   if (snprintf(gGameResPath, sizeof(gGameResPath), "%s\\RES", gGameRootPath) < 0)
+      return FALSE;
+   if (!DirectoryExistsA(gGameResPath))
+      return FALSE;
+   gGamePathsReady = TRUE;
+   return TRUE;
+}
+
+static BOOL GetSettingsStoragePath(char* dest, size_t size)
+{
+   char module[_MAX_PATH];
+   if (GetModuleFileNameA(NULL, module, sizeof(module)) == 0)
+      return FALSE;
+   char* slash = strrchr(module, '\\');
+   if (slash == NULL)
+      return FALSE;
+   *(slash + 1) = '\0';
+   if (snprintf(dest, size, "%sdarkenginex_path.txt", module) < 0)
+      return FALSE;
+   dest[size - 1] = '\0';
+   return TRUE;
+}
+
+static BOOL LoadSavedGamePath(char* dest, size_t size)
+{
+   char storage[_MAX_PATH];
+   if (!GetSettingsStoragePath(storage, sizeof(storage)))
+      return FALSE;
+   FILE* file = fopen(storage, "r");
+   if (file == NULL)
+      return FALSE;
+   char buffer[_MAX_PATH];
+   if (fgets(buffer, sizeof(buffer), file) == NULL)
+   {
+      fclose(file);
+      return FALSE;
+   }
+   fclose(file);
+   size_t len = strcspn(buffer, "\r\n");
+   buffer[len] = '\0';
+   if (buffer[0] == '\0')
+      return FALSE;
+   strncpy(dest, buffer, size);
+   dest[size - 1] = '\0';
+   return TRUE;
+}
+
+static void SaveGamePath(const char* path)
+{
+   char storage[_MAX_PATH];
+   if (!GetSettingsStoragePath(storage, sizeof(storage)))
+      return;
+   FILE* file = fopen(storage, "w");
+   if (file == NULL)
+      return;
+   fputs(path, file);
+   fputs("\n", file);
+   fclose(file);
+}
+
+static BOOL PromptForGameRoot(char* dest, size_t size)
+{
+   BOOL result = FALSE;
+   HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+   BROWSEINFOA bi;
+   memset(&bi, 0, sizeof(bi));
+   bi.lpszTitle = "Select the Thief II install directory";
+   bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+   LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+   if (pidl != NULL)
+   {
+      char buffer[_MAX_PATH];
+      if (SHGetPathFromIDListA(pidl, buffer))
+      {
+         strncpy(dest, buffer, size);
+         dest[size - 1] = '\0';
+         result = TRUE;
+      }
+      IMalloc* imalloc = NULL;
+      if (SUCCEEDED(SHGetMalloc(&imalloc)))
+      {
+         imalloc->Free(pidl);
+         imalloc->Release();
+      }
+   }
+   if (hr == S_OK || hr == S_FALSE)
+      CoUninitialize();
+   return result;
+}
+
+static BOOL EnsureGamePathsInternal(void)
+{
+   if (gGamePathsReady)
+      return TRUE;
+   char candidate[_MAX_PATH];
+   if (LoadSavedGamePath(candidate, sizeof(candidate)) && BuildGamePaths(candidate))
+   {
+      SaveGamePath(gGameRootPath);
+      return TRUE;
+   }
+   while (PromptForGameRoot(candidate, sizeof(candidate)))
+   {
+      if (BuildGamePaths(candidate))
+      {
+         SaveGamePath(gGameRootPath);
+         return TRUE;
+      }
+      MessageBoxA(NULL, "Selected directory does not contain a valid Thief II installation.", APPNAME, MB_ICONERROR | MB_OK);
+   }
+   return FALSE;
+}
+
+const char* GetGameRootPath(void)
+{
+   if (!EnsureGamePathsInternal())
+      return NULL;
+   return gGameRootPath;
+}
+
+const char* GetGameConfigPath(void)
+{
+   if (!EnsureGamePathsInternal())
+      return NULL;
+   return gGameConfigPath;
+}
+
+const char* GetGameResPath(void)
+{
+   if (!EnsureGamePathsInternal())
+      return NULL;
+   return gGameResPath;
+}
 
 //----------------------------------------
 
@@ -255,7 +437,40 @@ tResult LGAPI CoreEngineCreateObjects(int argc, const char *argv[])
    // config sys initializes NOW so that it can be used to create objects
    //
    config_init();
-   config_read_file(CONFIG_FILE,app_read_cfg);
+   if (!EnsureGamePathsInternal())
+      return E_FAIL;
+   const char* configFile = GetGameConfigPath();
+   if (configFile == NULL)
+      return E_FAIL;
+   DebugMsg1("Loading config from: %s\n", configFile);
+   errtype config_result = config_read_file((char*)configFile,app_read_cfg);
+   if (config_result != OK)
+   {
+      DebugMsg1("WARNING: Failed to load config file (error code: %d)\n", config_result);
+   }
+
+   // Override key resource locations with absolute paths so assets resolve regardless of CWD.
+   {
+      const char* gameRoot = GetGameRootPath();
+      const char* gameRes  = GetGameResPath();
+      if (gameRoot == NULL || gameRes == NULL)
+         return E_FAIL;
+
+      char includePath[512];
+      snprintf(includePath, sizeof(includePath), "%s;%s", gameRoot, gameRes);
+
+      config_set_string("include_path", includePath);
+      config_set_string("resname_base", gameRes);
+      config_set_string("load_path", gameRes);
+      config_set_string("script_module_path", gameRoot);
+      config_set_string("movie_path", gameRoot);
+      config_set_string("cd_path", gameRoot);
+      config_set_string("lgvid_path", gameRoot);
+
+      // Disable startup CD checks since we are running from a local directory.
+      config_set_string("skip_starting_checks", "1");
+      config_set_string("no_startup_checks", "1");
+   }
 
    pick_game();
 
@@ -490,7 +705,12 @@ static bool write_func(char* filename, char* var)
 void AppShutdownConfig(void)
 {
    config_set_writable_table(ConfigWritableTable);
-   config_write_file(CONFIG_FILE,write_func);
+   if (EnsureGamePathsInternal())
+   {
+      const char* configFile = GetGameConfigPath();
+      if (configFile != NULL)
+         config_write_file((char*)configFile,write_func);
+   }
    config_shutdown();
 }
 

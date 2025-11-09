@@ -74,6 +74,7 @@
 
     // hacked data file
 #include <texture.h>
+#include "gamepaths.h"
 
 extern BOOL g_null_raster;
 
@@ -559,7 +560,12 @@ static int texturefilenum;
 
 void editgeom_init(void)
 {
-   texturefilenum = ResOpenFile("texture.res");
+   const char* resRoot = GetGameRootPath();
+   char texturePath[_MAX_PATH];
+   if (resRoot != NULL && snprintf(texturePath, sizeof(texturePath), "%s\\texture.res", resRoot) >= 0)
+      texturefilenum = ResOpenFile(texturePath);
+   else
+      texturefilenum = ResOpenFile("texture.res");
    gedit_init();
    COMMANDS(parse_keys, HK_EDITOR);
    COMMANDS(all_keys, HK_ALL);

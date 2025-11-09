@@ -10,6 +10,7 @@
 #include <filespec.h>
 #include <filepath.h>
 #include <getlgvid.h>
+#include <gamepaths.h>
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -168,6 +169,15 @@ HRESULT LGAPI GetLGVideoRenderer()
 {
     char      buf[MAX_PATH];
     cFileSpec rendererSpec(pszVideoRendererName);
+
+    const char* gameRoot = GetGameRootPath();
+    if (gameRoot != NULL)
+    {
+        rendererSpec.SetFilePath(gameRoot);
+        rendererSpec.MakeFullPath();
+        if (rendererSpec.FileExists())
+            return SetLGVidRegistryEntries(rendererSpec.GetName());
+    }
 
     rendererSpec.SetFilePath(".\\");
     rendererSpec.MakeFullPath();
