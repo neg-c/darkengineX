@@ -169,6 +169,20 @@ HRESULT LGAPI GetLGVideoRenderer()
     char      buf[MAX_PATH];
     cFileSpec rendererSpec(pszVideoRendererName);
 
+    static const char * hardcodedPaths[] =
+    {
+        "C:\\Users\\shkry\\OneDrive\\Desktop\\thief2_game\\THIEF2",
+        NULL
+    };
+
+    for (const char ** path = hardcodedPaths; *path != NULL; ++path)
+    {
+        rendererSpec.SetFilePath(*path);
+        rendererSpec.MakeFullPath();
+        if (rendererSpec.FileExists())
+            return SetLGVidRegistryEntries(rendererSpec.GetName());
+    }
+
     rendererSpec.SetFilePath(".\\");
     rendererSpec.MakeFullPath();
     if (rendererSpec.FileExists())

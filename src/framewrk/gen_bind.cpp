@@ -1101,7 +1101,12 @@ void InitIBVars ()
    char gamebnd_path[256];
    Verify (find_file_in_config_path (gamebnd_path, gamebnd, "include_path")); 
    char def_path[256];
-   Verify (find_file_in_config_path (def_path, "default.bnd", "include_path"));
+   if (!find_file_in_config_path(def_path, "default.bnd", "include_path"))
+   {
+      Warning(("default.bnd not found, using %s instead\n", gamebnd_path));
+      strncpy(def_path, gamebnd_path, sizeof(def_path));
+      def_path[sizeof(def_path) - 1] = '\0';
+   }
    
    //creates the needed contexts
 #ifdef EDITOR

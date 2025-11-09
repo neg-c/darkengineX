@@ -14,6 +14,7 @@
 #include <appapi.h>
 #include <appagg.h>
 #include <loopapi.h>
+#include <stdio.h>
 #include <config.h>
 #include <cfg.h>
 #include <mprintf.h>
@@ -97,7 +98,9 @@ EXTERN BOOL CheckForCD(void);
 // CONFIG INITIALIZATION
 //
 
-#define CONFIG_FILE "cam.cfg"
+#define CONFIG_FILE "C:\\Users\\shkry\\OneDrive\\Desktop\\thief2_game\\THIEF2\\cam.cfg"
+#define GAME_ROOT_PATH "C:\\Users\\shkry\\OneDrive\\Desktop\\thief2_game\\THIEF2"
+#define GAME_RES_PATH  "C:\\Users\\shkry\\OneDrive\\Desktop\\thief2_game\\THIEF2\\RES"
 #define GAME_CFG_VAR "game"
 #define INCLUDE_PREFIX "include_"
 void AppShutdownConfig(void);
@@ -255,7 +258,44 @@ tResult LGAPI CoreEngineCreateObjects(int argc, const char *argv[])
    // config sys initializes NOW so that it can be used to create objects
    //
    config_init();
-   config_read_file(CONFIG_FILE,app_read_cfg);
+   
+   // Log the full path to the config file for debugging
+   char full_path[_MAX_PATH];
+   if (_fullpath(full_path, CONFIG_FILE, _MAX_PATH) != NULL)
+   {
+      DebugMsg1("Loading config from: %s\n", full_path);
+   }
+   else
+   {
+      DebugMsg1("Config file (relative): %s\n", CONFIG_FILE);
+   }
+   
+   errtype config_result = config_read_file(CONFIG_FILE,app_read_cfg);
+   if (config_result != OK)
+   {
+      DebugMsg1("WARNING: Failed to load config file (error code: %d)\n", config_result);
+   }
+
+   // Override key resource locations with absolute paths so assets resolve regardless of CWD.
+   {
+      const char* gameRoot = GAME_ROOT_PATH;
+      const char* gameRes  = GAME_RES_PATH;
+
+      char includePath[512];
+      snprintf(includePath, sizeof(includePath), "%s;%s", gameRoot, gameRes);
+
+      config_set_string("include_path", includePath);
+      config_set_string("resname_base", gameRes);
+      config_set_string("load_path", gameRes);
+      config_set_string("script_module_path", gameRoot);
+      config_set_string("movie_path", gameRoot);
+      config_set_string("cd_path", gameRoot);
+      config_set_string("lgvid_path", gameRoot);
+
+      // Disable startup CD checks since we are running from a local directory.
+      config_set_string("skip_starting_checks", "1");
+      config_set_string("no_startup_checks", "1");
+   }
 
    pick_game();
 

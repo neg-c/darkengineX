@@ -559,7 +559,7 @@ static int texturefilenum;
 
 void editgeom_init(void)
 {
-   texturefilenum = ResOpenFile("texture.res");
+   texturefilenum = ResOpenFile("C:\\Users\\shkry\\OneDrive\\Desktop\\thief2_game\\THIEF2\\texture.res");
    gedit_init();
    COMMANDS(parse_keys, HK_EDITOR);
    COMMANDS(all_keys, HK_ALL);
