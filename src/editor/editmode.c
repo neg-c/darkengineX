@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <string.h>
 
 #include <lg.h>
 #include <loopapi.h>
@@ -19,6 +20,7 @@
 
 #include <editmode.h>
 #include <gamemode.h>
+#include <gamepaths.h>
 
 #include <cfgtool.h>
 #include <brushgfh.h>
@@ -141,10 +143,12 @@ static uiLoopContext _uidata =
 };
 
 // context for resource sys client
+static char gEditorResPath[_MAX_PATH] = "editor.res";
+
 static ResLoopContext _resdata =
-{ 
-   { 
-      "editor.res",  // a list of files to open
+{
+   {
+      gEditorResPath,  // a list of files to open
    }
 };
 
@@ -188,6 +192,16 @@ static sLoopInstantiator _instantiator =
 
 sLoopInstantiator* DescribeEditMode(EditMinorMode minorMode, EditModeDesc* desc)
 {
+   const char* gameRes = GetGameRootPath();
+   if (gameRes != NULL)
+   {
+      int written = snprintf(gEditorResPath, sizeof(gEditorResPath), "%s\\editor.res", gameRes);
+      if (written > 0 && written < (int)sizeof(gEditorResPath))
+         _resdata.resfiles[0] = gEditorResPath;
+      else
+         strcpy(gEditorResPath, "editor.res");
+   }
+
    if (minorMode != mmEditNoChange)
    {
       _instantiator.minorMode = minorMode;
