@@ -492,7 +492,7 @@ void cLoopDispatch::AddClientsFromMode(ILoopMode* pLoop, ConstraintTable& constr
 		auto* pID = *ppIDs;
 
 		if (*pID == GUID_NULL)
-			break;
+			continue;
 
 		auto next_client = false;
 		for (auto idx = 0; idx < m_aClientInfo.Size(); ++idx)
